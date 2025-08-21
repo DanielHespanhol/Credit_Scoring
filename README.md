@@ -108,6 +108,147 @@ Importância: Fornece estimativa confiável do desempenho em produção
 
 Importância: Alinhamento com práticas do setor financeiro e regulatórias
 
+## Explicação Detalhada do Código
+**1. Importação de Bibliotecas**
+```
+import pandas as pd
+import numpy as np
+import seaborn as sns
+import matplotlib.pyplot as plt
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV, KFold
+from sklearn.metrics import accuracy_score, confusion_matrix, classification_report, roc_curve, auc
+from sklearn.metrics import roc_auc_score, precision_score, recall_score, f1_score
+from sklearn.preprocessing import StandardScaler, PolynomialFeatures
+from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
+from scipy.stats import ks_2samp
+from imblearn.over_sampling import SMOTE
+from imblearn.under_sampling import RandomUnderSampler
+from imblearn.pipeline import Pipeline as ImbPipeline
+```
+
+**Propósito**: 
+Importa todas as bibliotecas necessárias para:
+- Manipulação de dados (pandas, numpy)
+- Visualização (seaborn, matplotlib)
+- Machine Learning (scikit-learn)
+- Balanceamento de classes (imbalanced-learn)
+- Análise estatística (scipy)
+
+**2. Funções Auxiliares**  
+`calcular_ks(y_true, y_pred)`  
+Objetivo: Calcula a estatística Kolmogorov-Smirnov, que mede a distância máxima entre as distribuições de probabilidade dos clientes "bons" e "maus".  
+Importância: KS > 0.3 indica bom poder discriminativo do modelo.
+
+`calcular_gini(y_true, y_pred)`  
+Objetivo: Calcula o coeficiente de Gini a partir da AUC.  
+Fórmula: GINI = 2 × AUC - 1
+
+`fill_missing_values(df, column, filler_values)`  
+Objetivo: Preenche valores missing de forma inteligente, distribuindo valores de preenchimento uniformemente.  
+
+`plot_roc_curve(y_true, y_pred_proba)`  
+Objetivo: Visualiza a curva ROC para avaliar o desempenho do modelo.  
+
+`evaluate_credit_model(y_true, y_pred, y_pred_proba)`  
+Objetivo: Avaliação completa do modelo com todas as métricas relevantes para credit scoring.  
+
+`select_important_features(model, feature_names, threshold=0.1)`  
+Objetivo: Seleciona features mais importantes baseado nos coeficientes da regressão logística.  
+
+**3. Preparação e Tratamento de Dados**  
+```
+# Carregamento dos dados
+df = pd.read_csv('/content/drive/MyDrive/DATA_VIKING/credit_risk.csv')
+
+# Tratamento de valores missing
+df['saving_accounts'].fillna('little', inplace=True)
+fill_missing_values(df, 'checking_account', ['little', 'moderate'])
+
+# Codificação de variáveis categóricas
+df['risk'] = df['risk'].map({'good': 1, 'bad': 0})
+df['sex'] = df['sex'].map({'male': 1, 'female': 0})
+
+# Feature engineering temporal
+df['month'] = df['reference'].str.split('-').str[1].astype(int)
+df['year'] = df['reference'].str.split('-').str[0].astype(int)
+
+# One-hot encoding
+categorical_columns = df.select_dtypes(include=['object']).columns
+for column in categorical_columns:
+    df = pd.get_dummies(df, columns=[column], drop_first=True, dtype=int)
+```
+
+**Processos realizados**:  
+- Limpeza de dados: Tratamento de valores missing
+- Codificação: Transformação de variáveis categóricas em numéricas
+- Engenharia de features: Criação de variáveis temporais
+- Preparação final: One-hot encoding para todas as variáveis categóricas
+
+**4. Modelo I - Regressão Logística Básica**  
+**Objetivo**: Modelo baseline sem balanceamento ou otimização.
+**Etapas**:  
+- Divisão treino-teste (80-20)
+- Treinamento do modelo
+- Avaliação com múltiplas métricas
+- Validação cruzada
+- Otimização com GridSearch
+
+**5. Tratamento de Desbalanceamento**  
+```
+balancing_pipeline = ImbPipeline([
+    ('smote', SMOTE(random_state=42)),
+    ('undersampling', RandomUnderSampler(random_state=42))
+])
+```
+Técnicas utilizadas:  
+- SMOTE: Synthetic Minority Over-sampling Technique
+- Random UnderSampling: Redução da classe majoritária
+Propósito:
+Lidar com o desbalanceamento típico em credit scoring (muitos "bons" vs poucos "maus").
+
+**6. Modelo II - Com Balanceamento**  
+Melhorias:
+- Dados balanceados
+- `class_weight='balanced'` na regressão logística
+- Avaliação mais robusta
+
+**7. Feature Engineering e Seleção**  
+Processo:
+- Análise dos coeficientes do modelo
+- Seleção das features mais importantes (threshold > 0.1)
+- Redução de dimensionalidade
+
+**8. Modelo III - Com Features Selecionadas**  
+Vantagens:
+- Menos overfitting
+- Modelo mais interpretável
+- Tempo de treinamento reduzido
+
+**9. Pipeline Completo com Feature Engineering**  
+```
+model_pipeline = Pipeline([
+    ('preprocessor', preprocessor),
+    ('classifier', LogisticRegression())
+])
+```
+Componentes:
+- Pré-processamento: StandardScaler para normalização
+- Classificador: Regressão Logística
+- Otimização: GridSearch com validação cruzada
+
+**10. Validação com K-Fold**  
+Técnica: K-Fold Cross Validation com 5 folds  
+Objetivo: Avaliar robustez e generalização do modelo  
+
+**11. Resultados Finais**  
+Comparação entre modelos:
+- Modelo Básico
+- Modelo Balanceado
+- Modelo com Features Selecionadas
+- Pipeline Completo
+
 ## Métricas de Avaliação
 - Acurácia: Percentual de previsões corretas
 - Precisão: Percentual de "maus" identificados corretamente
@@ -117,36 +258,18 @@ Importância: Alinhamento com práticas do setor financeiro e regulatórias
 - KS: Kolmogorov-Smirnov (0.3+ = bom, 0.4+ = excelente)
 - GINI: Coeficiente de Gini (0.5+ = bom, 0.6+ = excelente)
 
-## Instalação
-Para executar este projeto, você precisará das seguintes bibliotecas Python:
-```bash
-pip install pandas numpy scikit-learn imbalanced-learn seaborn matplotlib
-```
-
-## Uso
-1. Clone o repositório:
-```bash
-git clone https://github.com/DanielHespanhol/Credit_Scoring
-cd Credit_Scoring
-```
-
-2. Execute o notebook Jupyter:
-```bash
-jupyter notebook Credit_Scoring_Consolidated.ipynb
-```
-
-3. Siga as etapas no notebook para carregar os dados, treinar o modelo e avaliar os resultados.
-
 ## Estrutura do Código
 - **Preparação dos dados**: Carregamento, tratamento de valores ausentes e codificação de variáveis.
 - **Modelagem**: Treinamento do modelo de regressão logística com validação cruzada.
 - **Avaliação**: Cálculo de métricas e visualização de resultados.
 
-## Resultados
-O modelo foi avaliado com as seguintes métricas:
-- Acurácia: 71,87%
-- KS Score: 0,5006
-- Gini Index: 0,5527
+## Resultados  
+| Modelo                | AUC    | KS     | GINI   |  
+| --------------------- | ------ | ------ | ------ |  
+| Básico                | 0.5642 | 0.1549 | 0.1285 |  
+| Balanceado            | 0.7871 | 0.4769 | 0.5743 |  
+| Features Selecionadas | 0.7763 | 0.5006 | 0.5526 |  
+| Pipeline Completo     | 0.6858 | NaN    | NaN    |  
 
 Para detalhes completos, consulte o notebook.
 
